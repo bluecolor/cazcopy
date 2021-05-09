@@ -59,17 +59,15 @@ func startWorker(cassandra *cassandra.Cassandra, params []param, credential azbl
 		}
 		url := ""
 		options := azb.WriterOptions{}
-		azw, err := azb.NewAzBlobFileWriter(ctx, url, credential, options)
-		pw, err := writer.NewParquetWriter(fw, new(student), 4)
+		fw, err := azb.NewAzBlobFileWriter(ctx, url, credential, options)
+		pw, err := writer.NewParquetWriter(fw, new(ConnectivityRecord), 4)
 		if err != nil {
 			return err
 		}
 
 		query := p.getQuery()
 		iter := cassandra.Session.Query(query).Iter()
-		// columns := iter.Columns()
 		scanner := iter.Scanner()
-		var buffer []ConnectivityRecord
 		for scanner.Next() {
 			var record map[string]interface{}
 
@@ -77,7 +75,7 @@ func startWorker(cassandra *cassandra.Cassandra, params []param, credential azbl
 				return err
 			}
 			cr := NewConnectivityRecord(record)
-			if err = azw.Write(cr); err != nil {
+			if err = pw.Write(cr); err != nil {
 				return err
 			}
 		}
@@ -87,7 +85,7 @@ func startWorker(cassandra *cassandra.Cassandra, params []param, credential azbl
 	return nil
 }
 
-func (c *Connectivity) Run(cassandra *cassandra.Cassandra, tmpPath string, parallel int) error {
+func (c *Connectivity) Run(cassandra *cassandra.Cassandra, azcredential azblob.Credential, parallel int) error {
 	assets, err := readAssets(c.assets, c.startym, c.endym)
 	if err != nil {
 		return err
@@ -96,7 +94,7 @@ func (c *Connectivity) Run(cassandra *cassandra.Cassandra, tmpPath string, paral
 	chunks := toChunks(params, parallel)
 
 	for _, chunk := range chunks {
-		startWorker(cassandra, chunk)
+		startWorker(cassandra, chunk, azcredential)
 	}
 	return nil
 }
